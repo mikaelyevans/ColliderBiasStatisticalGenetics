@@ -1,0 +1,114 @@
+
+
+```{r load-packages}
+#| message: false
+library(snpStats)
+library(tidyverse)
+library(broom)
+library(qqman)
+```
+
+```{r file-paths}
+# update file paths
+bed <- '../FP/data/1_QC_GWAS_FP/HapMap_3_r3_1.bed'
+bim <- '../FP/data/1_QC_GWAS_FP/HapMap_3_r3_1.bim'
+fam <- '../FP/data/1_QC_GWAS_FP/HapMap_3_r3_1.fam'
+```
+
+```{r read-data}
+hapmap <- read.plink(bed, bim, fam)
+```
+
+```{r explore-data}
+class(hapmap)
+names(hapmap)
+```
+
+```{r}
+X <- as(hapmap$genotypes, "numeric")
+
+maf <- col.summary(hapmap$genotypes)$MAF
+
+X.clean <- X[, maf>0]
+
+```
+
+
+# Selecting a single SNP to use as a our exposure
+```{r}
+set.seed(111)
+
+#Randomly choosing 1 SNP from the cleaned geontype 
+snp_index <- sample(ncol(X.clean), 1)
+snp_exposure <- X.clean[, snp_index]
+snp_name <- colnames(X.clean)[snp_index]
+cat("Using SNP:", snp_name)
+
+```
+
+
+#Generting Sex independet of genotype, basically 50/50 chance
+```{r}
+n <- nrow(X.clean)
+sex_sim <- rbinom(n, 1, 0.5)
+```
+
+
+#Simulating height as the collider variable
+
+```{r}
+
+#So i am assuming a baseline of 5foot 4 for females and adding 5 for males. So basically saying that average female height is 5 foot 4 and average male height is 5 foot 9. I am having a SNP have an effect (2 per copy) on height. Last, I am adding some error (totally made up the residual)
+
+
+height_sim <- 64 + 5 * sex_sim + 2 * snp_exposure + rnorm(n, mean = 0, sd = 3)
+```
+
+```{r}
+sim_data <- data.frame(
+  SNP = snp_exposure,
+  Sex = sex_sim,      
+  Height = height_sim
+)
+head(sim_data)
+```
+
+```{r}
+model_unadj <- glm(Sex ~ SNP, data = sim_data, family = binomial)
+summary(model_unadj)
+pvalue_unadjusted[i] <- summary(model_unadj)$coefficients["SNP", "Pr(>|z|)"]
+
+
+model_adj <- glm(Sex ~ SNP + Height, data = sim_data, family = binomial)
+summary(model_adj)
+pvals_adj[i] <- summary(model_adj)$coefficients["SNP", "Pr(>|z|)"]
+}
+```
+
+```{r}
+library(qqman)
+
+qq(pvals_unadj, main = "QQ Plot: Unadjusted Model (Sex ~ SNP)")
+qq(pvals_adj, main = "QQ Plot: Adjusted Model (Sex ~ SNP + Height)")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
