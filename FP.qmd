@@ -1,25 +1,63 @@
 ---
-title: "Collider Bias in GWAS"
+title: "Collider Bias in Genome-Wide Association Studies"
 subtitle: "STAT 494: Statistical Genetics"
 author: "Charles Batsaikhan, Mikaely Evans, and Julia Ross"
 date: today
-format:
+format: 
   html:
     toc: true
     toc-depth: 3
     embed-resources: true
+    code-tools: true
 ---
 
+```{r setup}
+#| include: false
+knitr::opts_chunk$set(echo = TRUE, error = TRUE)
+```
+
 ```{r load-packages}
-#| message: false
+#| include: false
+
 library(snpStats)
 library(tidyverse)
 library(broom)
-library(qqman)
+library(qqman)      # for qq plots
 ```
 
-# Data
 
+\
+\
+
+
+# Research Goals
+
+We have chosen to explore the topic of Collider Bias from the statistical field of Causal Inference. Author Scott Cunnigham defines causal inference as “leveraging of theory and deep knowledge of institutional details to estimate the impact of events and choices on a given outcome of interest” (4). Causal inference takes an understanding of context beyond the raw data. In particular with observational data, like genetic data, you have to be wary of apparent correlation because the variables are chosen by the researchers. There are three key notions for studying causality: comparing potential outcomes, observing multiple units, and choosing the right assignment mechanism (Imbens 3-4). 
+
+One particular kind of bias that can threaten the validity of a study and the estimation of a causal relationship between variables is collider bias. Collider bias occurs when an exposure and outcome each influence a common third variable that has been controlled for (Holmberg 1282). It is similar to confounding, but the difference is confounding is a variable not accounted for. We can try to identify colliders using DAGs and looking for variable where two arrows point to a controlled variable. 
+
+We chose this topic because we all have have learning goals more centered around learning and implementing advanced statistical methods than around the genetic content itself. Some of us have experience with causal inference, and some of us are hoping to use this project to learn about the topic. We opted for collider bias as our specific causal inference topic over Mendelian randomization because, based on the information we found, this method will be more applicable to other fields and other types of data. 
+
+<details>
+
+<summary>Works Cited</summary>
+
+Cunningham, Scott. “Introduction.” Causal Inference: The Mixtape, Yale University Press, 2021, pp. 1–15. JSTOR, https://doi.org/10.2307/j.ctv1c29t27.4. Accessed 12 Mar. 2025.
+
+Holmberg, Mathias J., and Lars W. Andersen. “Collider Bias.” Jama, vol. 327, no. 13, 2022, pp. 1282–83, https://doi.org/10.1001/jama.2022.1820.
+
+Imbens, Guido W., and Donald B. Rubin. “Causality: The Basic Framework.” Causal Inference for Statistics, Social, and Biomedical Sciences: An Introduction. Cambridge: Cambridge University Press, 2015. 3–22. Print.
+
+</details>
+
+
+\
+\
+
+
+# SNP Data
+
+### Upload HapMap Data
 ```{r file-paths}
 # update file paths
 bed <- 'data/1_QC_GWAS/HapMap_3_r3_1.bed'
@@ -31,12 +69,8 @@ fam <- 'data/1_QC_GWAS/HapMap_3_r3_1.fam'
 hapmap <- read.plink(bed, bim, fam)
 ```
 
-```{r explore-data}
-class(hapmap)
-names(hapmap)
-```
-
-```{r}
+### Clean SNP Data
+```{r clean-snps}
 X <- as(hapmap$genotypes, "numeric")
 
 maf <- col.summary(hapmap$genotypes)$MAF
@@ -48,17 +82,17 @@ X.clean <- X[, maf>0]
 
 \
 \
-\
 
 
-# Simulation
+# Simulating Our Data
 
-### Selecting a single SNP to use as a our exposure
 
-```{r}
+### Selecting our Exposure (SNP)
+
+```{r select-snp}
 set.seed(111) #for reproducability
 
-#Randomly choosing 1 SNP from the cleaned genotype 
+#Randomly choosing 1 SNP from the cleaned genotype to be our exposure SNP
 snp_index <- sample(ncol(X.clean), 1)
 snp_exposure <- X.clean[, snp_index]
 snp_name <- colnames(X.clean)[snp_index]
@@ -67,18 +101,19 @@ cat("Using SNP:", snp_name)
 ```
 
 
-### Generating Sex
-```{r}
+### Generating our Outcome (Sex)
+
+```{r generate-sex}
 n <- nrow(X.clean)
-sex_sim <- rbinom(n, 1, 0.5) #independet of genotype, basically 50/50 chance
+sex_sim <- rbinom(n, 1, 0.5) #independent of genotype, basically a 50/50 chance of a data point being either sex 
 ```
 
 
-### Generating Height as the Collider
+### Generating our Collider (Height)
 
-```{r}
+```{r generate-height}
 
-#assuming a baseline of 5 foot 4 for females and 5 foot 9 for males
+#assuming an average height of 5 foot 4 for females and 5 foot 9 for males
 #making a SNP have an effect (2 per copy) on height
 #adding some error (random residual)
 
@@ -86,9 +121,9 @@ height_sim <- 64 + 5 * sex_sim + 2 * snp_exposure + rnorm(n, mean = 0, sd = 3)
 ```
 
 
-### Simulating Data
+### Creating our Dataset
 
-```{r}
+```{r simulating-data}
 iterations <- 500
 
 pvalues_unadj <- numeric(iterations)
@@ -96,23 +131,25 @@ pvalues_adj <- numeric(iterations)
 
 n <- nrow(X.clean)
 
-set.seed(200)
+set.seed(200)   # for reproducability
 
 for (i in 1:iterations) {
-  sex_sim <- rbinom(n,size=1, prob=0.5)
+  #define sex and height
+  sex_sim <- rbinom(n, size = 1, prob = 0.5)
   height_sim <- 64 + 5 * sex_sim + 2 * snp_exposure + rnorm(n, mean = 0, sd = 3)
   
-  sim_data <- data.frame(
+  #save simulated data
+  sim_data <- data.frame(   
     SNP = snp_exposure,
     Sex = sex_sim,
     Height = height_sim
   )
   
-  # Sex~SNP
+  # sex based on SNP
   mod_unadj <- glm(Sex ~ SNP, data = sim_data, family = binomial)
   pvalues_unadj[i] <- summary(mod_unadj)$coefficients["SNP", "Pr(>|z|)"]
   
-  # Sex~SNP+HEIGHT
+  # sex based on SNP accounting for height
   mod_adj <- glm(Sex ~ SNP + Height, data = sim_data, family = binomial)
   pvalues_adj[i] <- summary(mod_adj)$coefficients["SNP", "Pr(>|z|)"]
   
@@ -123,27 +160,50 @@ for (i in 1:iterations) {
 
 \
 \
-\
 
 
-# Plots
+# Visualizations
 
-## QQ Plots
+### QQ Plots
 
-```{r}
-library(qqman)
+```{r qq-plots}
 
-
+# sex based on SNP
 qq(pvalues_unadj, main = "Sex~SNP QQ Plot")
 
-
+# sex based on SNP accounting for height
 qq(pvalues_adj, main = "Sex~SNP+HEIGHT QQ Plot")
 ```
 
 
+\
+\
 
 
+# Correcting for Collider Bias
 
+### Slope Hunter Method
+
+```{r slope-hunter}
+#code here
+
+```
+
+
+### Mendelian Randomization
+
+```{r mendelian}
+#code here
+
+```
+
+
+### Instrument Efffect Regression Method
+
+```{r instrument-effect}
+#code here
+
+```
 
 
 
