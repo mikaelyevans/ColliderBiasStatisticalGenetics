@@ -10,9 +10,9 @@ library(qqman)
 
 ```{r file-paths}
 # update file paths
-bed <- '../data/1_QC_GWAS_FP/HapMap_3_r3_1.bed'
-bim <- '../data/1_QC_GWAS_FP/HapMap_3_r3_1.bim'
-fam <- '../data/1_QC_GWAS_FP/HapMap_3_r3_1.fam'
+bed <- 'data/1_QC_GWAS/HapMap_3_r3_1.bed'
+bim <- 'data/1_QC_GWAS/HapMap_3_r3_1.bim'
+fam <- 'data/1_QC_GWAS/HapMap_3_r3_1.fam'
 ```
 
 ```{r read-data}
