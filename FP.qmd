@@ -1,4 +1,14 @@
-
+---
+title: "Collider Bias in GWAS"
+subtitle: "STAT 494: Statistical Genetics"
+author: "Charles Batsaikhan, Mikaely Evans, and Julia Ross"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    embed-resources: true
+---
 
 ```{r load-packages}
 #| message: false
@@ -7,6 +17,8 @@ library(tidyverse)
 library(broom)
 library(qqman)
 ```
+
+# Data
 
 ```{r file-paths}
 # update file paths
@@ -34,11 +46,19 @@ X.clean <- X[, maf>0]
 ```
 
 
-# Selecting a single SNP to use as a our exposure
-```{r}
-set.seed(111)
+\
+\
+\
 
-#Randomly choosing 1 SNP from the cleaned geontype 
+
+# Simulation
+
+### Selecting a single SNP to use as a our exposure
+
+```{r}
+set.seed(111) #for reproducability
+
+#Randomly choosing 1 SNP from the cleaned genotype 
 snp_index <- sample(ncol(X.clean), 1)
 snp_exposure <- X.clean[, snp_index]
 snp_name <- colnames(X.clean)[snp_index]
@@ -47,23 +67,26 @@ cat("Using SNP:", snp_name)
 ```
 
 
-#Generting Sex independet of genotype, basically 50/50 chance
+### Generating Sex
 ```{r}
 n <- nrow(X.clean)
-sex_sim <- rbinom(n, 1, 0.5)
+sex_sim <- rbinom(n, 1, 0.5) #independet of genotype, basically 50/50 chance
 ```
 
 
-#Simulating height as the collider variable
+### Generating Height as the Collider
 
 ```{r}
 
-#So i am assuming a baseline of 5foot 4 for females and adding 5 for males. So basically saying that average female height is 5 foot 4 and average male height is 5 foot 9. I am having a SNP have an effect (2 per copy) on height. Last, I am adding some error (totally made up the residual)
+#assuming a baseline of 5 foot 4 for females and 5 foot 9 for males
+#making a SNP have an effect (2 per copy) on height
+#adding some error (random residual)
 
-
-#height_sim <- 64 + 5 * sex_sim + 2 * snp_exposure + rnorm(n, mean = 0, sd = 3)
+height_sim <- 64 + 5 * sex_sim + 2 * snp_exposure + rnorm(n, mean = 0, sd = 3)
 ```
 
+
+### Simulating Data
 
 ```{r}
 iterations <- 500
@@ -97,6 +120,15 @@ for (i in 1:iterations) {
 }
 ```
 
+
+\
+\
+\
+
+
+# Plots
+
+## QQ Plots
 
 ```{r}
 library(qqman)
