@@ -1,0 +1,216 @@
+---
+title: "Collider Bias in GWAS"
+subtitle: "STAT 494: Statistical Genetics"
+author: "Charles Batsaikhan, Mikaely Evans, and Julia Ross"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    embed-resources: true
+---
+
+```{r load-packages}
+#| message: false
+library(snpStats)
+library(tidyverse)
+library(broom)
+library(qqman)
+```
+
+# Collider Bias package
+```{r}
+library(devtools)
+install_github("SiyangCai/ColliderBias")
+library(ColliderBias)
+```
+
+
+# Data
+
+```{r file-paths}
+# update file paths
+bed <- '1_QC_GWAS/HapMap_3_r3_1.bed'
+bim <- '1_QC_GWAS/HapMap_3_r3_1.bim'
+fam <- '1_QC_GWAS/HapMap_3_r3_1.fam'
+```
+
+```{r read-data}
+hapmap <- read.plink(bed, bim, fam)
+```
+
+```{r explore-data}
+class(hapmap)
+names(hapmap)
+```
+
+```{r calculate-MAF}
+maf <- col.summary(hapmap$genotypes)$MAF
+head(maf)
+hapmap$map <- hapmap$map %>%
+  mutate(MAF = maf)
+
+class(hapmap$genotypes)
+
+# convert from "SnpMatrix" to "numeric"
+X <- as(hapmap$genotypes, "numeric")
+```
+### Generating Sex
+```{r}
+n <- nrow(X.clean)
+sex_sim <- rbinom(n, 1, 0.5) #independet of genotype, basically 50/50 chance
+```
+
+
+### Generating Height as the Collider
+
+```{r}
+
+#assuming a baseline of 5 foot 4 for females and 5 foot 9 for males
+#making a SNP have an effect (2 per copy) on height
+#adding some error (random residual)
+snp_index <- ncol(X.clean)
+snp_exposure <- X.clean[, snp_index]
+height_sim <- 64 + 5 * sex_sim + 2 * snp_exposure + rnorm(n, mean = 0, sd = 3)
+```
+
+```{r simulate-trait}
+# simulate trait
+set.seed(494) # set seed for reproducibility
+n <- nrow(X) # calculate the number of individuals 
+y <- 2 * X[,'rs2476601'] + rnorm(n, 0, 1) # y = 2 * x + e
+
+# look at the first few simulated trait values
+head(y)
+```
+
+```{r remove-mono-from-map}
+# keep only those SNPs with MAF > 0
+map.clean <- hapmap$map %>%
+  filter(MAF > 0)
+
+originalSNPs <- hapmap$map %>% count()
+finalSNPs <- map.clean %>% count()
+originalSNPs - finalSNPs
+```
+```{r remove-mono-from-genotypes}
+# create vector of which SNPs have a MAF of 0
+monomorphic <- which(maf == 0) 
+head(monomorphic) 
+
+# remove columns in the monomorphic vector
+X.clean <- X[,-monomorphic]
+```
+
+```{r run-gwas}
+iterations <- 10000
+
+beta_x <- numeric(iterations)
+se_x <- numeric(iterations)
+beta_y <- numeric(iterations)
+se_y <- numeric(iterations)
+
+n <- nrow(X.clean)
+y <- 2 * X[,'rs2476601'] + rnorm(n, 0, 1) # y = 2 * x + e
+
+set.seed(200)
+
+for (i in 1:iterations) {
+  if(i %% 1000 == 0) print(paste('Analyzing SNP', i)) 
+  
+  sex_sim <- rbinom(n,size=1, prob=0.5)
+  height_sim <- 64 + 5 * sex_sim + 2 * snp_exposure + rnorm(n, mean = 0, sd = 3)
+  
+  sim_data <- data.frame(
+    SNP = snp_exposure,
+    Sex = sex_sim,
+    Height = height_sim
+  )
+  
+  # Sex ~ SNP
+  mod_x <- glm(Sex ~ SNP, data = sim_data, family = binomial)
+  beta_x <- summary(mod_x)$coefficients["SNP", "Estimate"]
+  se_x <- summary(mod_x)$coefficients["SNP", "Std. Error"]
+  
+  # Sex ~ SNP + Height
+  mod_y <- glm(Sex ~ SNP + Height, data = sim_data, family = binomial)
+  beta_y <- summary(mod_y)$coefficients["SNP", "Estimate"]
+  se_y <- summary(mod_y)$coefficients["SNP", "Std. Error"]
+
+}
+
+```
+
+
+\
+\
+\
+
+
+# Correcting for Collider Bias
+
+```{r}
+library(ColliderBias)
+
+correcting <- ColliderBias::methodCB(
+  xbeta = beta_x, 
+  xse = se_x,
+  ybeta = as.numeric(beta_y),
+  yse = as.numeric(se_y),
+  method = "CWLS"
+)
+
+CWBLS(sim_data)
+
+correcting$ybeta.adj
+beta_y
+correcting$yse.adj
+se_y
+correcting$b
+correcting$b.se
+```
+
+# Why correct for collider bias
+- Greatly reduced T1E
+- Improves Power
+- Reduces Bias (selection bias)
+
+# Trialing CB test data
+```{r}
+library(ColliderBias)
+
+# Load the test dataset
+data(testData)
+
+short_data <- testData %>%
+  slice(1)
+
+# Adjust for collider bias using instrumental effect regression,
+# and weak instrument bias using CWLS.
+methodCB(short_data$dbeta, short_data$dse, short_data$ybeta, short_data$yse, method = "CWLS")
+
+# Find the true causal between an exposure of interest and disease progression.
+CWBLS(short_data)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
