@@ -36,7 +36,7 @@ We have chosen to explore the topic of Collider Bias from the statistical field 
 
 One particular kind of bias that can threaten the validity of a study and the estimation of a causal relationship between variables is collider bias. Collider bias occurs when an exposure and outcome each influence a common third variable that has been controlled for (Holmberg 1282). It is similar to confounding, but the difference is confounding is a variable not accounted for. We can try to identify colliders using DAGs and looking for variable where two arrows point to a controlled variable. 
 
-We chose this topic because we all have have learning goals more centered around learning and implementing advanced statistical methods than around the genetic content itself. Some of us have experience with causal inference, and some of us are hoping to use this project to learn about the topic. We opted for collider bias as our specific causal inference topic over Mendelian randomization because, based on the information we found, this method will be more applicable to other fields and other types of data. 
+We chose this topic because we all have have learning goals more centered around learning and implementing advanced statistical methods than around the genetic content itself. Some of us have experience with causal inference, and some of us are hoping to use this project to learn about the topic.
 
 <details>
 
@@ -182,11 +182,60 @@ qq(pvalues_adj, main = "Sex~SNP+HEIGHT QQ Plot")
 
 # Correcting for Collider Bias
 
+Why do we want to correct for collider bias?
+- Greatly reduces the likelihood of a Type 1 Error
+- Improves Power
+- Reduces Bias (selection bias)
+
+```{r BCpackage}
+library(devtools)
+install_github("SiyangCai/ColliderBias")
+library(ColliderBias)
+
+```
+
+
 ### Slope Hunter Method
 
 ```{r slope-hunter}
-#code here
+library(ColliderBias)
 
+correcting <- ColliderBias::methodCB(
+  xbeta = beta_x, 
+  xse = se_x,
+  ybeta = as.numeric(beta_y),
+  yse = as.numeric(se_y),
+  method = "CWLS"
+)
+
+CWBLS(sim_data)
+
+correcting$ybeta.adj
+beta_y
+correcting$yse.adj
+se_y
+correcting$b
+correcting$b.se
+```
+
+
+# Trialing CB test data
+
+```{r}
+library(ColliderBias)
+
+# Load the test dataset
+data(testData)
+
+short_data <- testData %>%
+  slice(1)
+
+# Adjust for collider bias using instrumental effect regression,
+# and weak instrument bias using CWLS.
+methodCB(short_data$dbeta, short_data$dse, short_data$ybeta, short_data$yse, method = "CWLS")
+
+# Find the true causal between an exposure of interest and disease progression.
+CWBLS(short_data)
 ```
 
 
